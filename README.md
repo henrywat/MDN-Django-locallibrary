@@ -827,3 +827,420 @@ class BookAdmin(admin.ModelAdmin):
 ---
 
 # Django Tutorial Part 5: Creating our home page
+
+## Defining the resource URLs
+
+- catalog/ — The home (index) page.
+- catalog/books/ — A list of all books.
+- catalog/authors/ — A list of all authors.
+- catalog/book/\<id> — The detail view for a particular book, with a field primary key of \<id> (the default). For example, the URL for the third book added to the list will be /catalog/book/3.
+- catalog/author/\<id> — The detail view for the specific author with a primary key field of \<id>. For example, the URL for the 11th author added to the list will be /catalog/author/11
+
+## Creating the index page
+
+### URL mapping
+
+<p>Open /catalog/urls.py. Add the following lines to that file:</p>
+
+```
+urlpatterns = [
+    path('', views.index, name='index'),
+]
+```
+
+>Note: We can hard code the link as in \<a href="/catalog/">Home</a>), but if we change the pattern for our home page, for example, to /catalog/index) the templates will no longer link correctly. Using a reversed URL mapping is more robust.
+
+### View (function-based)
+
+Open catalog/views.py and note that the file already imports the [render()](https://docs.djangoproject.com/en/5.0/topics/http/shortcuts/#django.shortcuts.render). Paste the following lines:
+
+```
+from .models import Book, Author, BookInstance, Genre
+
+def index(request):
+    """View function for home page of site."""
+
+    # Generate counts of some of the main objects
+    num_books = Book.objects.all().count()
+    num_instances = BookInstance.objects.all().count()
+
+    # Available books (status = 'a')
+    num_instances_available = BookInstance.objects.filter(status__exact='a').count()
+
+    # The 'all()' is implied by default.
+    num_authors = Author.objects.count()
+
+    context = {
+        'num_books': num_books,
+        'num_instances': num_instances,
+        'num_instances_available': num_instances_available,
+        'num_authors': num_authors,
+    }
+
+    # Render the HTML template index.html with the data in the context variable
+    return render(request, 'index.html', context=context)
+```
+
+### Template
+
+<p>A Django application created using startapp (like the skeleton of this example) will look for templates in a subdirectory named 'templates' of your applications.</p>
+
+>Note: Based on your project's settings file, Django will look for templates in a number of places, searching in your installed applications by default. You can find out more about how Django finds templates and what template formats it supports in the Templates section of the Django documentation.
+
+<p>Create a new file base_generic.html in catalog/templates/ and paste the following code to the file:</p>
+
+```
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    {% block title %}
+      <title>Local Library</title>
+    {% endblock %}
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous">
+    <!-- Add additional CSS in static file -->
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}" />
+  </head>
+  <body>
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-2">
+          {% block sidebar %}
+            <ul class="sidebar-nav">
+              <li><a href="{% url 'index' %}">Home</a></li>
+              <li><a href="">All books</a></li>
+              <li><a href="">All authors</a></li>
+            </ul>
+          {% endblock %}
+        </div>
+        <div class="col-sm-10 ">{% block content %}{% endblock %}</div>
+      </div>
+    </div>
+  </body>
+</html>
+```
+
+<p>Create a styles.css file in catalog/static/css/ and paste the following code in the file:</p>
+
+```
+.sidebar-nav {
+  margin-top: 20px;
+  padding: 0;
+  list-style: none;
+}
+```
+
+<p>Create a new HTML file index.html in catalog/templates/ and paste the following code in the file.</p>
+
+```
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h1>Local Library Home</h1>
+  <p>
+    Welcome to LocalLibrary, a website developed by
+    <em>Mozilla Developer Network</em>!
+  </p>
+  <h2>Dynamic content</h2>
+  <p>The library has the following record counts:</p>
+  <ul>
+    <li><strong>Books:</strong> {{ num_books }}</li>
+    <li><strong>Copies:</strong> {{ num_instances }}</li>
+    <li><strong>Copies available:</strong> {{ num_instances_available }}</li>
+    <li><strong>Authors:</strong> {{ num_authors }}</li>
+  </ul>
+{% endblock %}
+```
+
+*Referencing static files in templates*
+
+```
+<!-- Add additional CSS in static file -->
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/styles.css' %}" />
+```
+
+*You can add an image into the page in a similar way, for example:*
+
+```
+{% load static %}
+<img
+  src="{% static 'catalog/images/local_library_model_uml.png' %}"
+  alt="UML diagram"
+  style="width:555px;height:540px;" />
+```
+
+>Note: The samples above specify where the files are located, but Django does not serve them by default. We configured the development web server to serve files by modifying the global URL mapper (locallibrary/urls.py) when we created the website skeleton, but still need to enable file serving in production. We'll look at this later.
+
+*Linking to URLs*
+
+```
+<li><a href="{% url 'index' %}">Home</a></li>
+```
+
+<p>At this point we have created all required resources to display the index page.</p>
+
+![index_prelim](/images/index_prelim.png)
+
+---
+
+# Django Tutorial Part 6: Generic list and detail views
+
+## Book list page
+
+### URL mapping
+
+<p>Open /catalog/urls.py and copy in the line setting the path for 'books/', as shown below.</p>
+
+```
+urlpatterns = [
+    path('', views.index, name='index'),
+    path('books/', views.BookListView.as_view(), name='books'),
+]
+```
+
+>Inheriting from an existing generic view function that already does most of what we want this view function to do, rather than writing our own from scratch.
+
+>as_view( ) does all the work of creating an instance of the class, and making sure that the right handler methods are called for incoming HTTP requests.
+
+### View (class-based)
+
+<p>Open catalog/views.py, and copy the following code into the bottom of the file:</p>
+
+```
+from django.views import generic
+
+class BookListView(generic.ListView):
+    model = Book
+```
+
+<p>The generic view will query the database to get all records for the specified model (Book) then render a template. Within the template you can access the list of books with the template variable named object_list OR book_list (i.e. generically "< the model name>_list").</p>
+
+- you can specify another template file if you need to have multiple views that use this same model, or you might want to use a different template variable name if book_list is not intuitive for your particular template use-case.
+
+```
+class BookListView(generic.ListView):
+    model = Book
+    context_object_name = 'book_list'   # your own name for the list as a template variable
+    queryset = Book.objects.filter(title__icontains='war')[:5] # Get 5 books containing the title war
+    template_name = 'books/my_arbitrary_template_name_list.html'  # Specify your own template name/location
+```
+
+- we can override the get_queryset( ) method to change the list of records returned.
+
+```
+class BookListView(generic.ListView):
+    model = Book
+
+    def get_queryset(self):
+        return Book.objects.filter(title__icontains='war')[:5] # Get 5 books containing the title war
+```
+
+- We might also override get_context_data() in order to pass additional context variables to the template.
+
+```
+class BookListView(generic.ListView):
+    model = Book
+
+    def get_context_data(self, **kwargs):
+        # Call the base implementation first to get the context
+        context = super(BookListView, self).get_context_data(**kwargs)
+        # Create any data and add it to the context
+        context['some_data'] = 'This is just some data'
+        return context
+```
+
+### Creating the List View template
+
+<p>Create the HTML file catalog/templates/catalog/book_list.html and copy in the text below.</p>
+
+```
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h1>Book List</h1>
+  {% if book_list %}
+    <ul>
+      {% for book in book_list %}
+      <li>
+        <a href="{{ book.get_absolute_url }}">{{ book.title }}</a>
+        ({{book.author}})
+      </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>There are no books in the library.</p>
+  {% endif %}
+{% endblock %}
+```
+
+- You might also use the {% empty %} template tag to define what happens if the book list is empty
+
+```
+{% if book_list %}
+  <!-- code here to list the books -->
+{% else %}
+  <p>There are no books in the library.</p>
+{% endif %}
+```
+
+### Update the base template
+
+<p>Open the base template (catalog/templates/base_generic.html) and insert {% url 'books' %} into the URL link for All books, as shown below.<p>
+
+```
+<li><a href="{% url 'index' %}">Home</a></li>
+<li><a href="{% url 'books' %}">All books</a></li>
+<li><a href="">All authors</a></li>
+```
+
+## Book detail page
+
+### URL mapping
+
+```
+urlpatterns = [
+    path('', views.index, name='index'),
+    path('books/', views.BookListView.as_view(), name='books'),
+    path('book/<int:pk>', views.BookDetailView.as_view(), name='book-detail'),
+]
+```
+
+>In this case we use '\<int:pk\>' to capture the book id, which must be a specially formatted string and pass it to the view as a parameter named pk (short for primary key).
+
+### Advanced path matching/regular expression primer
+
+- If you need more refined filtering (for example, to filter only strings that have a certain number of characters) then you can use the re_path() method.
+
+```
+re_path(r'^book/(?P<pk>\d+)$', views.BookDetailView.as_view(), name='book-detail'),
+```
+
+### Passing additional options in your URL maps
+
+- For example, given the path shown below, for a request to /myurl/halibut/ Django will call views.my_view(request, fish='halibut', my_template_name='some_path').
+
+```
+path('myurl/<fish>', views.my_view, {'my_template_name': 'some_path'}, name='aurl'),
+```
+
+## View (class-based)
+
+<p>Open catalog/views.py, and copy the following code into the bottom of the file:</p>
+
+```
+class BookDetailView(generic.DetailView):
+    model = Book
+```
+- What happens if the record doesn't exist?
+
+```
+def book_detail_view(request, primary_key):
+    try:
+        book = Book.objects.get(pk=primary_key)
+    except Book.DoesNotExist:
+        raise Http404('Book does not exist')
+
+    return render(request, 'catalog/book_detail.html', context={'book': book})
+```
+
+- Another way you could do this if you were not using a generic view would be to call the get_object_or_404() function.
+
+```
+from django.shortcuts import get_object_or_404
+
+def book_detail_view(request, primary_key):
+    book = get_object_or_404(Book, pk=primary_key)
+    return render(request, 'catalog/book_detail.html', context={'book': book})
+```
+
+
+## Creating the Detail View template
+
+<p>Create the HTML file /django-locallibrary-tutorial/catalog/templates/catalog/book_detail.html and give it the below content.</p>
+
+```
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h1>Title: {{ book.title }}</h1>
+
+  <p><strong>Author:</strong> <a href="">{{ book.author }}</a></p>
+  <!-- author detail link not yet defined -->
+  <p><strong>Summary:</strong> {{ book.summary }}</p>
+  <p><strong>ISBN:</strong> {{ book.isbn }}</p>
+  <p><strong>Language:</strong> {{ book.language }}</p>
+  <p><strong>Genre:</strong> {{ book.genre.all|join:", " }}</p>
+
+  <div style="margin-left:20px;margin-top:20px">
+    <h4>Copies</h4>
+
+    {% for copy in book.bookinstance_set.all %}
+      <hr />
+      <p
+        class="{% if copy.status == 'a' %}text-success{% elif copy.status == 'm' %}text-danger{% else %}text-warning{% endif %}">
+        {{ copy.get_status_display }}
+      </p>
+      {% if copy.status != 'a' %}
+        <p><strong>Due to be returned:</strong> {{ copy.due_back }}</p>
+      {% endif %}
+      <p><strong>Imprint:</strong> {{ copy.imprint }}</p>
+      <p class="text-muted"><strong>Id:</strong> {{ copy.id }}</p>
+    {% endfor %}
+  </div>
+{% endblock %}
+```
+
+![booklist_perlim](/images/booklist_perlim.png)
+
+![bookdetail_perlim](/images/bookdetail_perlim.png)
+
+## Pagination
+
+<p>Open catalog/views.py, and add the paginate_by line shown below.</p>
+
+```
+class BookListView(generic.ListView):
+    model = Book
+    paginate_by = 10
+```
+
+<p>Open base_generic.html and Copy in the following pagination block immediately following the {% endblock %}.</p>
+
+```
+{% block pagination %}
+    {% if is_paginated %}
+        <div class="pagination">
+            <span class="page-links">
+                {% if page_obj.has_previous %}
+                    <a href="{{ request.path }}?page={{ page_obj.previous_page_number }}">previous</a>
+                {% endif %}
+                <span class="page-current">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+                </span>
+                {% if page_obj.has_next %}
+                    <a href="{{ request.path }}?page={{ page_obj.next_page_number }}">next</a>
+                {% endif %}
+            </span>
+        </div>
+    {% endif %}
+  {% endblock %}
+```
+
+![booklist_pagination](/images/booklist_pagination.png)
+
+## Challenge yourself
+
+![authorlist_prelim](/images/authorlist_prelim.png)
+
+![authorbooklist_prelim](/images/authorbooklist_prelim.png)
+
+---
+
+# Django Tutorial Part 7: Sessions framework
+
