@@ -1244,3 +1244,86 @@ class BookListView(generic.ListView):
 
 # Django Tutorial Part 7: Sessions framework
 
+## Enabling sessions
+
+<p>The configuration is set up in the INSTALLED_APPS and MIDDLEWARE sections of the project file (locallibrary/settings.py), as shown below:</p>
+
+```
+INSTALLED_APPS = [
+    # …
+    'django.contrib.sessions',
+    # …
+
+MIDDLEWARE = [
+    # …
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    # …
+```
+
+## Using sessions
+
+```
+# Get a session value by its key (e.g. 'my_car'), raising a KeyError if the key is not present
+my_car = request.session['my_car']
+
+# Get a session value, setting a default if it is not present ('mini')
+my_car = request.session.get('my_car', 'mini')
+
+# Set a session value
+request.session['my_car'] = 'mini'
+
+# Delete a session value
+del request.session['my_car']
+```
+
+### Saving session data
+
+<p>If you're updating some information within session data, you will need to explicitly mark the session as having been modified.</p>
+
+```
+# Session object not directly modified, only data within the session. Session changes not saved!
+request.session['my_car']['wheels'] = 'alloy'
+
+# Set session as modified to force data updates/cookie to be saved.
+request.session.modified = True
+```
+
+*Simple example — getting visit counts*
+
+```
+def index(request):
+    # …
+
+    num_authors = Author.objects.count()  # The 'all()' is implied by default.
+
+    # Number of visits to this view, as counted in the session variable.
+    num_visits = request.session.get('num_visits', 0)
+    request.session['num_visits'] = num_visits + 1
+
+    context = {
+        'num_books': num_books,
+        'num_instances': num_instances,
+        'num_instances_available': num_instances_available,
+        'num_authors': num_authors,
+        'num_visits': num_visits,
+    }
+
+    # Render the HTML template index.html with the data in the context variable.
+    return render(request, 'index.html', context=context)
+```
+
+```
+<h2>Dynamic content</h2>
+
+<p>The library has the following record counts:</p>
+<ul>
+  <li><strong>Books:</strong> {{ num_books }}</li>
+  <li><strong>Copies:</strong> {{ num_instances }}</li>
+  <li><strong>Copies available:</strong> {{ num_instances_available }}</li>
+  <li><strong>Authors:</strong> {{ num_authors }}</li>
+</ul>
+
+<p>
+  You have visited this page {{ num_visits }} time{{ num_visits|pluralize }}.
+</p>
+```
